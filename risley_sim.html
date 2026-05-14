@@ -41,6 +41,7 @@ canvas{display:block;width:100%;height:480px}
 .ctrl-group{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-secondary)}
 .ctrl-group label{white-space:nowrap}
 input[type=range]{width:112px}
+input[type=checkbox]{width:14px;height:14px;cursor:pointer}
 input[type=number]{
   width:64px;
   padding:3px 6px;
@@ -50,11 +51,21 @@ input[type=number]{
   color:var(--color-text-primary);
   font:inherit;
 }
+select{
+  padding:3px 8px;
+  border:0.5px solid var(--color-border-secondary);
+  border-radius:6px;
+  background:transparent;
+  color:var(--color-text-primary);
+  font:inherit;
+}
+input:disabled,button:disabled{opacity:0.45;cursor:not-allowed}
 .unit{margin-left:-4px;color:var(--color-text-secondary)}
 .badge{font-size:11px;padding:2px 8px;border-radius:4px;font-weight:500;white-space:nowrap}
 .b-blue{background:#E6F1FB;color:#185FA5}
 .b-red{background:#FAECE7;color:#993C1D}
 .b-green{background:#EAF3DE;color:#3B6D11}
+.b-purple{background:#EEEDFE;color:#3C3489}
 button{font-size:12px;padding:4px 12px;border-radius:6px;border:0.5px solid var(--color-border-secondary);background:transparent;color:var(--color-text-primary);cursor:pointer}
 button:hover{background:var(--color-background-secondary)}
 @media(prefers-color-scheme:dark){
@@ -71,6 +82,7 @@ button:hover{background:var(--color-background-secondary)}
   .b-blue{background:#0C447C;color:#B5D4F4}
   .b-red{background:#712B13;color:#F5C4B3}
   .b-green{background:#27500A;color:#C0DD97}
+  .b-purple{background:#3C3489;color:#EEEDFE}
 }
 </style>
 </head>
@@ -78,7 +90,7 @@ button:hover{background:var(--color-background-secondary)}
 <main class="page">
   <header class="intro">
     <h1>Dual Prism Risley Scanner Visualizer</h1>
-    <p>Explore how two rotating wedge prisms steer a laser spot across a scan plane. Use base RPM, individual speed multipliers, and the velocity ratio to shape the scan trail.</p>
+    <p>Explore how rotating wedge prisms steer a laser spot across a scan plane, including an optional P2 galvo mode with amplitude, frequency, phase, and center controls.</p>
   </header>
   <section class="panel" aria-label="Risley scanner visualization">
     <div class="wrap">
@@ -86,6 +98,16 @@ button:hover{background:var(--color-background-secondary)}
   <div class="controls">
     <button id="playBtn">⏸ Pause</button>
     <button id="clearBtn">Clear trail</button>
+    <div class="ctrl-group">
+      <span class="badge b-green">Preset</span>
+      <select id="preset" aria-label="Scan preset">
+        <option value="original">Original ratio scan</option>
+        <option value="circle_fixed">Fixed P2 circle reference</option>
+        <option value="counter">Counter-rotate 1:1</option>
+        <option value="clover">Clover 2:1</option>
+        <option value="custom">Custom</option>
+      </select>
+    </div>
     <div class="ctrl-group">
       <span class="badge b-green">Base RPM</span>
       <input type="range" id="rpm" min="0" max="120" step="1" value="12">
@@ -119,7 +141,35 @@ button:hover{background:var(--color-background-secondary)}
       <button id="d2btn">CCW</button>
     </div>
     <div class="ctrl-group">
-      <label>Wedge α</label>
+      <span class="badge b-red">P2 galvo</span>
+      <input type="checkbox" id="galvo" aria-label="Use galvo motion for P2">
+    </div>
+    <div class="ctrl-group">
+      <span class="badge b-red">Amplitude</span>
+      <input type="range" id="gamp" min="0" max="180" step="1" value="90">
+      <input type="number" id="gampn" min="0" max="180" step="1" value="90" aria-label="P2 galvo amplitude">
+      <span class="unit">°</span>
+    </div>
+    <div class="ctrl-group">
+      <span class="badge b-red">Galvo freq</span>
+      <input type="range" id="gfreq" min="0" max="4" step="0.001" value="1">
+      <input type="number" id="gfreqn" min="0" max="4" step="0.001" value="1" aria-label="P2 galvo frequency multiplier">
+      <span class="unit">×</span>
+    </div>
+    <div class="ctrl-group">
+      <span class="badge b-red">Phase</span>
+      <input type="range" id="gphase" min="0" max="360" step="1" value="90">
+      <input type="number" id="gphasen" min="0" max="360" step="1" value="90" aria-label="P2 galvo phase">
+      <span class="unit">°</span>
+    </div>
+    <div class="ctrl-group">
+      <span class="badge b-red">Center</span>
+      <input type="range" id="gcenter" min="0" max="360" step="1" value="0">
+      <input type="number" id="gcentern" min="0" max="360" step="1" value="0" aria-label="P2 galvo center angle">
+      <span class="unit">°</span>
+    </div>
+    <div class="ctrl-group">
+      <span class="badge b-purple">Wedge α</span>
       <input type="range" id="wedge" min="5" max="40" step="1" value="18">
       <input type="number" id="wedgen" min="5" max="40" step="1" value="18" aria-label="Wedge angle">
       <span class="unit">°</span>
@@ -144,6 +194,11 @@ let baseRpm = 12;
 let speed1 = 1.0, speed2 = 1.037;
 let speedRatio = 1.037;
 let wedgeDeg = 18;
+let galvoP2 = false;
+let galvoAmpDeg = 90;
+let galvoFreq = 1;
+let galvoPhaseDeg = 90;
+let galvoCenterDeg = 0;
 let lastSpot = null;
 let spotHistory = [];
 const MAX_TRAIL = 3000;
@@ -177,6 +232,20 @@ function formatRatio() {
 
 function effectiveRpm(speed) {
   return baseRpm * speed;
+}
+
+function currentP2Angle() {
+  if (!galvoP2) return angle2;
+
+  const center = galvoCenterDeg * Math.PI / 180;
+  const amplitude = galvoAmpDeg * Math.PI / 180;
+  const phase = galvoPhaseDeg * Math.PI / 180;
+  return center + amplitude * Math.sin(galvoFreq * angle1 + phase);
+}
+
+function p2MotionLabel() {
+  if (!galvoP2) return `${formatNumber(effectiveRpm(speed2), 1)} rpm  ${dir2 > 0 ? 'CW' : 'CCW'}`;
+  return `galvo ±${formatNumber(galvoAmpDeg, 0)}°  ${formatNumber(galvoFreq)}×`;
 }
 
 // Layout constants (computed relative to canvas width)
@@ -255,7 +324,7 @@ function draw() {
 
   // Prism angles
   const a1 = angle1;
-  const a2 = angle2;
+  const a2 = currentP2Angle();
 
   // Beam: starts horizontal from source, deflected by P1, then P2
   // P1 deflects by wedge in direction of prism angle
@@ -403,7 +472,7 @@ function draw() {
   ctx.fillStyle = prismRed;
   ctx.fillText('P2', L.p2x, L.srcY - L.prismR - 18);
   ctx.font = `400 10px var(--font-sans, sans-serif)`;
-  ctx.fillText(`${formatNumber(effectiveRpm(speed2), 1)} rpm  ${dir2 > 0 ? 'CW' : 'CCW'}`, L.p2x, L.srcY - L.prismR - 6);
+  ctx.fillText(p2MotionLabel(), L.p2x, L.srcY - L.prismR - 6);
 
   // Scan plane label
   ctx.font = `400 11px var(--font-sans, sans-serif)`;
@@ -414,7 +483,10 @@ function draw() {
   // Ratio label
   ctx.font = `400 11px var(--font-sans, sans-serif)`;
   ctx.fillStyle = mutedColor();
-  ctx.fillText(`ω₂/ω₁ = ${formatRatio()}`, L.scanX, L.scanY + L.scanR + 30);
+  const scanLabel = galvoP2
+    ? `P2 galvo: amp=${formatNumber(galvoAmpDeg, 0)}° freq=${formatNumber(galvoFreq)}× phase=${formatNumber(galvoPhaseDeg, 0)}°`
+    : `ω₂/ω₁ = ${formatRatio()}`;
+  ctx.fillText(scanLabel, L.scanX, L.scanY + L.scanR + 30);
 
   // Wedge label bottom
   ctx.fillText(`Wedge α = ${wedgeDeg}°`, (L.p1x + L.p2x) / 2, L.srcY + L.prismR + 28);
@@ -445,7 +517,9 @@ function roundRect(ctx, x, y, w, h, r) {
 function advanceAngles(dt) {
   const radiansPerSecond = baseRpm * TAU / 60;
   angle1 += radiansPerSecond * speed1 * dir1 * dt;
-  angle2 += radiansPerSecond * speed2 * dir2 * dt;
+  if (!galvoP2) {
+    angle2 += radiansPerSecond * speed2 * dir2 * dt;
+  }
 }
 
 function loop(now) {
@@ -462,6 +536,7 @@ requestAnimationFrame(loop);
 // Controls
 const playBtn = document.getElementById('playBtn');
 const clearBtn = document.getElementById('clearBtn');
+const presetSelect = document.getElementById('preset');
 const rpmInput = document.getElementById('rpm');
 const rpmNumber = document.getElementById('rpmn');
 const speed1Input = document.getElementById('s1');
@@ -474,6 +549,44 @@ const wedgeInput = document.getElementById('wedge');
 const wedgeNumber = document.getElementById('wedgen');
 const dir1Btn = document.getElementById('d1btn');
 const dir2Btn = document.getElementById('d2btn');
+const galvoInput = document.getElementById('galvo');
+const galvoAmpInput = document.getElementById('gamp');
+const galvoAmpNumber = document.getElementById('gampn');
+const galvoFreqInput = document.getElementById('gfreq');
+const galvoFreqNumber = document.getElementById('gfreqn');
+const galvoPhaseInput = document.getElementById('gphase');
+const galvoPhaseNumber = document.getElementById('gphasen');
+const galvoCenterInput = document.getElementById('gcenter');
+const galvoCenterNumber = document.getElementById('gcentern');
+
+const presets = {
+  original: {
+    baseRpm: 12, speed1: 1, speed2: 1.037, speedRatio: 1.037,
+    dir1: 1, dir2: -1, wedgeDeg: 18, galvoP2: false,
+    galvoAmpDeg: 90, galvoFreq: 1, galvoPhaseDeg: 90, galvoCenterDeg: 0
+  },
+  circle_fixed: {
+    baseRpm: 20, speed1: 1, speed2: 1, speedRatio: 1,
+    dir1: 1, dir2: -1, wedgeDeg: 18, galvoP2: true,
+    galvoAmpDeg: 0, galvoFreq: 1, galvoPhaseDeg: 90, galvoCenterDeg: 90
+  },
+  counter: {
+    baseRpm: 20, speed1: 1, speed2: 1, speedRatio: 1,
+    dir1: 1, dir2: -1, wedgeDeg: 18, galvoP2: false,
+    galvoAmpDeg: 90, galvoFreq: 1, galvoPhaseDeg: 90, galvoCenterDeg: 0
+  },
+  clover: {
+    baseRpm: 12, speed1: 1, speed2: 0.5, speedRatio: 0.5,
+    dir1: 1, dir2: 1, wedgeDeg: 18, galvoP2: false,
+    galvoAmpDeg: 90, galvoFreq: 1, galvoPhaseDeg: 90, galvoCenterDeg: 0
+  }
+};
+
+let applyingPreset = false;
+
+function markCustom() {
+  if (!applyingPreset) presetSelect.value = 'custom';
+}
 
 function updateControlLabels() {
   rpmInput.value = baseRpm.toString();
@@ -486,6 +599,49 @@ function updateControlLabels() {
   ratioNumber.value = formatNumber(speedRatio);
   wedgeInput.value = wedgeDeg.toString();
   wedgeNumber.value = wedgeDeg.toString();
+  galvoInput.checked = galvoP2;
+  galvoAmpInput.value = galvoAmpDeg.toString();
+  galvoAmpNumber.value = formatNumber(galvoAmpDeg, 0);
+  galvoFreqInput.value = galvoFreq.toString();
+  galvoFreqNumber.value = formatNumber(galvoFreq);
+  galvoPhaseInput.value = galvoPhaseDeg.toString();
+  galvoPhaseNumber.value = formatNumber(galvoPhaseDeg, 0);
+  galvoCenterInput.value = galvoCenterDeg.toString();
+  galvoCenterNumber.value = formatNumber(galvoCenterDeg, 0);
+  dir1Btn.textContent = dir1 > 0 ? 'CW' : 'CCW';
+  dir2Btn.textContent = dir2 > 0 ? 'CW' : 'CCW';
+
+  [speed2Input, speed2Number, ratioInput, ratioNumber, dir2Btn].forEach((control) => {
+    control.disabled = galvoP2;
+  });
+  [galvoAmpInput, galvoAmpNumber, galvoFreqInput, galvoFreqNumber, galvoPhaseInput, galvoPhaseNumber, galvoCenterInput, galvoCenterNumber].forEach((control) => {
+    control.disabled = !galvoP2;
+  });
+}
+
+function applyPreset(key) {
+  const preset = presets[key];
+  if (!preset) return;
+
+  applyingPreset = true;
+  baseRpm = preset.baseRpm;
+  speed1 = preset.speed1;
+  speed2 = preset.speed2;
+  speedRatio = preset.speedRatio;
+  dir1 = preset.dir1;
+  dir2 = preset.dir2;
+  wedgeDeg = preset.wedgeDeg;
+  galvoP2 = preset.galvoP2;
+  galvoAmpDeg = preset.galvoAmpDeg;
+  galvoFreq = preset.galvoFreq;
+  galvoPhaseDeg = preset.galvoPhaseDeg;
+  galvoCenterDeg = preset.galvoCenterDeg;
+  angle1 = 0;
+  angle2 = 0;
+  presetSelect.value = key;
+  updateControlLabels();
+  clearTrail();
+  applyingPreset = false;
 }
 
 function setSpeed2FromRatio() {
@@ -508,6 +664,7 @@ function commitNumber(numberInput, rangeInput, applyValue) {
 
   const clamped = clamp(value, Number(rangeInput.min), Number(rangeInput.max));
   applyValue(clamped);
+  markCustom();
   updateControlLabels();
   clearTrail();
 }
@@ -527,8 +684,12 @@ playBtn.onclick = () => {
 clearBtn.onclick = () => {
   clearTrail();
 };
+presetSelect.onchange = function() {
+  applyPreset(this.value);
+};
 rpmInput.oninput = function() {
   baseRpm = parseFloat(this.value);
+  markCustom();
   updateControlLabels();
   clearTrail();
 };
@@ -537,6 +698,7 @@ speed1Input.oninput = function() {
   if (speed1 > 0) {
     speedRatio = clamp(speed2 / speed1, Number(ratioInput.min), Number(ratioInput.max));
   }
+  markCustom();
   updateControlLabels();
   clearTrail();
 };
@@ -545,17 +707,50 @@ speed2Input.oninput = function() {
   if (speed1 > 0) {
     speedRatio = clamp(speed2 / speed1, Number(ratioInput.min), Number(ratioInput.max));
   }
+  markCustom();
   updateControlLabels();
   clearTrail();
 };
 ratioInput.oninput = function() {
   speedRatio = parseFloat(this.value);
   setSpeed2FromRatio();
+  markCustom();
   updateControlLabels();
   clearTrail();
 };
 wedgeInput.oninput = function() {
   wedgeDeg = parseInt(this.value);
+  markCustom();
+  updateControlLabels();
+  clearTrail();
+};
+galvoInput.onchange = function() {
+  galvoP2 = this.checked;
+  markCustom();
+  updateControlLabels();
+  clearTrail();
+};
+galvoAmpInput.oninput = function() {
+  galvoAmpDeg = parseInt(this.value);
+  markCustom();
+  updateControlLabels();
+  clearTrail();
+};
+galvoFreqInput.oninput = function() {
+  galvoFreq = parseFloat(this.value);
+  markCustom();
+  updateControlLabels();
+  clearTrail();
+};
+galvoPhaseInput.oninput = function() {
+  galvoPhaseDeg = parseInt(this.value);
+  markCustom();
+  updateControlLabels();
+  clearTrail();
+};
+galvoCenterInput.oninput = function() {
+  galvoCenterDeg = parseInt(this.value);
+  markCustom();
   updateControlLabels();
   clearTrail();
 };
@@ -587,14 +782,36 @@ applyOnEnter(wedgeNumber, () => {
     wedgeDeg = Math.round(value);
   });
 });
+applyOnEnter(galvoAmpNumber, () => {
+  commitNumber(galvoAmpNumber, galvoAmpInput, (value) => {
+    galvoAmpDeg = Math.round(value);
+  });
+});
+applyOnEnter(galvoFreqNumber, () => {
+  commitNumber(galvoFreqNumber, galvoFreqInput, (value) => {
+    galvoFreq = value;
+  });
+});
+applyOnEnter(galvoPhaseNumber, () => {
+  commitNumber(galvoPhaseNumber, galvoPhaseInput, (value) => {
+    galvoPhaseDeg = Math.round(value);
+  });
+});
+applyOnEnter(galvoCenterNumber, () => {
+  commitNumber(galvoCenterNumber, galvoCenterInput, (value) => {
+    galvoCenterDeg = Math.round(value);
+  });
+});
 dir1Btn.onclick = function() {
   dir1 *= -1;
-  this.textContent = dir1 > 0 ? 'CW' : 'CCW';
+  markCustom();
+  updateControlLabels();
   clearTrail();
 };
 dir2Btn.onclick = function() {
   dir2 *= -1;
-  this.textContent = dir2 > 0 ? 'CW' : 'CCW';
+  markCustom();
+  updateControlLabels();
   clearTrail();
 };
 updateControlLabels();
