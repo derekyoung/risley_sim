@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dual Prism Risley Scanner Visualizer</title>
+<style>
+:root{
+  color-scheme:light dark;
+  --font-sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --color-text-primary:#2d2d2a;
+  --color-text-secondary:#6f6d66;
+  --color-background:#f6f5f0;
+  --color-background-panel:#ffffff;
+  --color-background-secondary:#f0eee7;
+  --color-border-secondary:#c9c5ba;
+  --color-border-tertiary:#ded9cd;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%}
+body{
+  font-family:var(--font-sans);
+  color:var(--color-text-primary);
+  background:var(--color-background);
+  padding:24px;
+}
+.page{width:min(1100px,100%);margin:0 auto}
+.intro{margin-bottom:14px}
+.intro h1{font-size:22px;line-height:1.2;margin-bottom:6px}
+.intro p{font-size:13px;line-height:1.5;color:var(--color-text-secondary);max-width:760px}
+.panel{
+  overflow:hidden;
+  border:0.5px solid var(--color-border-tertiary);
+  border-radius:14px;
+  background:var(--color-background-panel);
+  box-shadow:0 18px 45px rgba(20,20,18,0.08);
+}
+.wrap{display:flex;flex-direction:column;gap:0;padding:0}
+canvas{display:block;width:100%;height:480px}
+.controls{display:flex;align-items:center;gap:16px;padding:12px 16px;flex-wrap:wrap;border-top:0.5px solid var(--color-border-tertiary)}
+.ctrl-group{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-secondary)}
+.ctrl-group label{white-space:nowrap}
+input[type=range]{width:112px}
+input[type=number]{
+  width:64px;
+  padding:3px 6px;
+  border:0.5px solid var(--color-border-secondary);
+  border-radius:6px;
+  background:transparent;
+  color:var(--color-text-primary);
+  font:inherit;
+}
+.unit{margin-left:-4px;color:var(--color-text-secondary)}
+.badge{font-size:11px;padding:2px 8px;border-radius:4px;font-weight:500;white-space:nowrap}
+.b-blue{background:#E6F1FB;color:#185FA5}
+.b-red{background:#FAECE7;color:#993C1D}
+.b-green{background:#EAF3DE;color:#3B6D11}
+button{font-size:12px;padding:4px 12px;border-radius:6px;border:0.5px solid var(--color-border-secondary);background:transparent;color:var(--color-text-primary);cursor:pointer}
+button:hover{background:var(--color-background-secondary)}
+@media(prefers-color-scheme:dark){
+  :root{
+    --color-text-primary:#d8d5cb;
+    --color-text-secondary:#aaa69a;
+    --color-background:#11110f;
+    --color-background-panel:#1a1a18;
+    --color-background-secondary:#25231f;
+    --color-border-secondary:#4c493f;
+    --color-border-tertiary:#38352f;
+  }
+  .panel{box-shadow:0 18px 45px rgba(0,0,0,0.25)}
+  .b-blue{background:#0C447C;color:#B5D4F4}
+  .b-red{background:#712B13;color:#F5C4B3}
+  .b-green{background:#27500A;color:#C0DD97}
+}
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="intro">
+    <h1>Dual Prism Risley Scanner Visualizer</h1>
+    <p>Explore how two rotating wedge prisms steer a laser spot across a scan plane. Use base RPM, individual speed multipliers, and the velocity ratio to shape the scan trail.</p>
+  </header>
+  <section class="panel" aria-label="Risley scanner visualization">
+    <div class="wrap">
+  <canvas id="c" height="480"></canvas>
+  <div class="controls">
+    <button id="playBtn">⏸ Pause</button>
+    <button id="clearBtn">Clear trail</button>
+    <div class="ctrl-group">
+      <span class="badge b-green">Base RPM</span>
+      <input type="range" id="rpm" min="0" max="120" step="1" value="12">
+      <input type="number" id="rpmn" min="0" max="120" step="1" value="12" aria-label="Base RPM value">
+      <span class="unit">rpm</span>
+    </div>
+    <div class="ctrl-group">
+      <span class="badge b-blue">P1 speed</span>
+      <input type="range" id="s1" min="0" max="4" step="0.001" value="1">
+      <input type="number" id="s1n" min="0" max="4" step="0.001" value="1" aria-label="P1 speed multiplier">
+      <span class="unit">×</span>
+    </div>
+    <div class="ctrl-group">
+      <span class="badge b-red">P2 speed</span>
+      <input type="range" id="s2" min="0" max="4" step="0.001" value="1.037">
+      <input type="number" id="s2n" min="0" max="4" step="0.001" value="1.037" aria-label="P2 speed multiplier">
+      <span class="unit">×</span>
+    </div>
+    <div class="ctrl-group">
+      <span class="badge b-green">Ratio</span>
+      <input type="range" id="ratio" min="0" max="4" step="0.001" value="1.037">
+      <span class="unit">1:</span>
+      <input type="number" id="rn" min="0" max="4" step="0.001" value="1.037" aria-label="P2 to P1 speed ratio">
+    </div>
+    <div class="ctrl-group">
+      <span class="badge b-blue">P1 dir</span>
+      <button id="d1btn">CW</button>
+    </div>
+    <div class="ctrl-group">
+      <span class="badge b-red">P2 dir</span>
+      <button id="d2btn">CCW</button>
+    </div>
+    <div class="ctrl-group">
+      <label>Wedge α</label>
+      <input type="range" id="wedge" min="5" max="40" step="1" value="18">
+      <input type="number" id="wedgen" min="5" max="40" step="1" value="18" aria-label="Wedge angle">
+      <span class="unit">°</span>
+    </div>
+  </div>
+    </div>
+  </section>
+</main>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// Offscreen canvas for the accumulating scan trail
+const trail = document.createElement('canvas');
+const tctx = trail.getContext('2d');
+
+let playing = true;
+let angle1 = 0, angle2 = 0;
+let lastFrameTime = null;
+let dir1 = 1, dir2 = -1;
+let baseRpm = 12;
+let speed1 = 1.0, speed2 = 1.037;
+let speedRatio = 1.037;
+let wedgeDeg = 18;
+let lastSpot = null;
+let spotHistory = [];
+const MAX_TRAIL = 3000;
+const TAU = Math.PI * 2;
+
+function resize() {
+  const w = canvas.parentElement.offsetWidth || 680;
+  canvas.width = w;
+  canvas.height = 480;
+  trail.width = w;
+  trail.height = 480;
+  clearTrail();
+}
+resize();
+window.addEventListener('resize', resize);
+
+function clearTrail() {
+  tctx.clearRect(0, 0, trail.width, trail.height);
+  spotHistory = [];
+  lastSpot = null;
+}
+
+function formatNumber(value, digits = 3) {
+  return Number(value.toFixed(digits)).toString();
+}
+
+function formatRatio() {
+  if (speed1 === 0) return `1:${formatNumber(speedRatio)}`;
+  return `1:${formatNumber(speed2 / speed1)}`;
+}
+
+function effectiveRpm(speed) {
+  return baseRpm * speed;
+}
+
+// Layout constants (computed relative to canvas width)
+function layout() {
+  const W = canvas.width, H = canvas.height;
+  return {
+    W, H,
+    // Laser source center
+    srcX: W * 0.07, srcY: H * 0.38,
+    // Prism 1 center
+    p1x: W * 0.28, p1y: H * 0.38,
+    // Prism 2 center  
+    p2x: W * 0.48, p2y: H * 0.38,
+    // Scan plane center
+    scanX: W * 0.80, scanY: H * 0.38,
+    scanR: Math.min(W * 0.13, H * 0.30),
+    prismR: Math.min(W * 0.065, 44),
+  };
+}
+
+function drawPrism(cx, cy, r, angle, color) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+  // Wedge shape
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.5, -r);
+  ctx.lineTo(r * 0.6, 0);
+  ctx.lineTo(-r * 0.5, r);
+  ctx.closePath();
+  ctx.fillStyle = color + '33';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.fill();
+  ctx.stroke();
+  // Center dot
+  ctx.beginPath();
+  ctx.arc(0, 0, 3, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.restore();
+
+  // Rotation arc indicator
+  ctx.save();
+  ctx.translate(cx, cy);
+  const arcR = r + 10;
+  ctx.beginPath();
+  ctx.arc(0, 0, arcR, -Math.PI * 0.6, Math.PI * 0.6);
+  ctx.strokeStyle = color + '88';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+function isDark() {
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+function mutedColor() { return isDark() ? '#8a887f' : '#888780'; }
+function bgColor()   { return isDark() ? '#1a1a18' : '#ffffff'; }
+
+function draw() {
+  const L = layout();
+  const {W, H} = L;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  ctx.fillStyle = bgColor();
+  ctx.fillRect(0, 0, W, H);
+
+  const dark = isDark();
+  const wedge = wedgeDeg * Math.PI / 180;
+
+  // Prism angles
+  const a1 = angle1;
+  const a2 = angle2;
+
+  // Beam: starts horizontal from source, deflected by P1, then P2
+  // P1 deflects by wedge in direction of prism angle
+  const dx1 = Math.sin(a1) * wedge;
+  const dy1 = Math.cos(a1) * wedge;
+  // P2 further deflects
+  const dx2 = dx1 + Math.sin(a2) * wedge;
+  const dy2 = dy1 + Math.cos(a2) * wedge;
+
+  const beamEndX = L.scanX + Math.sin(dx2) * L.scanR;
+  const beamEndY = L.scanY + Math.sin(dy2) * L.scanR;
+
+  // ── Draw scan trail (accumulated) ──
+  // Record spot
+  if (playing) {
+    spotHistory.push({x: beamEndX, y: beamEndY});
+    if (spotHistory.length > MAX_TRAIL) spotHistory.shift();
+  }
+
+  // Draw trail on offscreen canvas
+  if (lastSpot && playing) {
+    tctx.beginPath();
+    tctx.moveTo(lastSpot.x, lastSpot.y);
+    tctx.lineTo(beamEndX, beamEndY);
+    tctx.strokeStyle = '#22d86e';
+    tctx.lineWidth = 1.2;
+    tctx.globalAlpha = 0.55;
+    tctx.stroke();
+    tctx.globalAlpha = 1;
+  }
+
+  // Fade trail over time by overlaying semi-transparent bg rect
+  if (playing) {
+    tctx.globalAlpha = 0.012;
+    tctx.fillStyle = bgColor();
+    tctx.fillRect(0, 0, trail.width, trail.height);
+    tctx.globalAlpha = 1;
+  }
+
+  // Draw scan plane background
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(L.scanX, L.scanY, L.scanR, 0, Math.PI * 2);
+  ctx.fillStyle = dark ? '#0a1a0a' : '#f0faf0';
+  ctx.fill();
+  ctx.strokeStyle = dark ? '#27500A' : '#639922';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+  ctx.restore();
+
+  // Blit trail
+  ctx.drawImage(trail, 0, 0);
+
+  // Beam spot on scan plane
+  ctx.beginPath();
+  ctx.arc(beamEndX, beamEndY, 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#22d86e';
+  ctx.globalAlpha = 0.95;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // Glow
+  const grad = ctx.createRadialGradient(beamEndX, beamEndY, 0, beamEndX, beamEndY, 14);
+  grad.addColorStop(0, '#22d86e55');
+  grad.addColorStop(1, '#22d86e00');
+  ctx.beginPath();
+  ctx.arc(beamEndX, beamEndY, 14, 0, Math.PI * 2);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // ── Optical axis ──
+  ctx.beginPath();
+  ctx.moveTo(L.srcX, L.srcY);
+  ctx.lineTo(L.scanX - L.scanR, L.scanY);
+  ctx.strokeStyle = mutedColor();
+  ctx.lineWidth = 0.5;
+  ctx.setLineDash([4, 4]);
+  ctx.globalAlpha = 0.3;
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+
+  // ── Laser beam segments ──
+  // Segment 1: source → P1
+  ctx.beginPath();
+  ctx.moveTo(L.srcX + 18, L.srcY);
+  ctx.lineTo(L.p1x, L.srcY);
+  ctx.strokeStyle = '#22d86e';
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.9;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Segment 2: P1 → P2 (slightly deflected)
+  ctx.beginPath();
+  ctx.moveTo(L.p1x, L.srcY);
+  ctx.lineTo(L.p2x, L.srcY + Math.sin(dy1) * L.prismR * 0.8);
+  ctx.strokeStyle = '#22d86e';
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.9;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Segment 3: P2 → scan plane
+  const p2OutY = L.srcY + Math.sin(dy1) * L.prismR * 0.8;
+  ctx.beginPath();
+  ctx.moveTo(L.p2x, p2OutY);
+  ctx.lineTo(beamEndX, beamEndY);
+  ctx.strokeStyle = '#22d86e';
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.85;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // ── Prisms ──
+  const prismBlue = '#378ADD';
+  const prismRed = '#D85A30';
+  drawPrism(L.p1x, L.srcY, L.prismR, a1, prismBlue);
+  drawPrism(L.p2x, L.srcY, L.prismR, a2, prismRed);
+
+  // ── Laser source box ──
+  const sx = L.srcX - 16, sy = L.srcY - 18;
+  ctx.fillStyle = dark ? '#1e2a1e' : '#f5fff5';
+  ctx.strokeStyle = '#22d86e';
+  ctx.lineWidth = 0.8;
+  roundRect(ctx, sx, sy, 34, 36, 5);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#22d86e';
+  ctx.font = `500 10px var(--font-sans, sans-serif)`;
+  ctx.textAlign = 'center';
+  ctx.fillText('λ', L.srcX, L.srcY + 4);
+
+  // ── Labels ──
+  ctx.font = `500 12px var(--font-sans, sans-serif)`;
+  ctx.textAlign = 'center';
+
+  // P1 label
+  ctx.fillStyle = prismBlue;
+  ctx.fillText('P1', L.p1x, L.srcY - L.prismR - 18);
+  ctx.font = `400 10px var(--font-sans, sans-serif)`;
+  ctx.fillText(`${formatNumber(effectiveRpm(speed1), 1)} rpm  ${dir1 > 0 ? 'CW' : 'CCW'}`, L.p1x, L.srcY - L.prismR - 6);
+
+  ctx.font = `500 12px var(--font-sans, sans-serif)`;
+  ctx.fillStyle = prismRed;
+  ctx.fillText('P2', L.p2x, L.srcY - L.prismR - 18);
+  ctx.font = `400 10px var(--font-sans, sans-serif)`;
+  ctx.fillText(`${formatNumber(effectiveRpm(speed2), 1)} rpm  ${dir2 > 0 ? 'CW' : 'CCW'}`, L.p2x, L.srcY - L.prismR - 6);
+
+  // Scan plane label
+  ctx.font = `400 11px var(--font-sans, sans-serif)`;
+  ctx.fillStyle = mutedColor();
+  ctx.textAlign = 'center';
+  ctx.fillText('Scan plane', L.scanX, L.scanY + L.scanR + 16);
+
+  // Ratio label
+  ctx.font = `400 11px var(--font-sans, sans-serif)`;
+  ctx.fillStyle = mutedColor();
+  ctx.fillText(`ω₂/ω₁ = ${formatRatio()}`, L.scanX, L.scanY + L.scanR + 30);
+
+  // Wedge label bottom
+  ctx.fillText(`Wedge α = ${wedgeDeg}°`, (L.p1x + L.p2x) / 2, L.srcY + L.prismR + 28);
+
+  // Laser label
+  ctx.textAlign = 'center';
+  ctx.fillStyle = mutedColor();
+  ctx.font = `400 10px var(--font-sans, sans-serif)`;
+  ctx.fillText('Laser', L.srcX, L.srcY + L.prismR + 14);
+
+  lastSpot = {x: beamEndX, y: beamEndY};
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function advanceAngles(dt) {
+  const radiansPerSecond = baseRpm * TAU / 60;
+  angle1 += radiansPerSecond * speed1 * dir1 * dt;
+  angle2 += radiansPerSecond * speed2 * dir2 * dt;
+}
+
+function loop(now) {
+  if (lastFrameTime === null) lastFrameTime = now;
+  const dt = Math.min((now - lastFrameTime) / 1000, 0.05);
+  lastFrameTime = now;
+
+  if (playing) advanceAngles(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// Controls
+const playBtn = document.getElementById('playBtn');
+const clearBtn = document.getElementById('clearBtn');
+const rpmInput = document.getElementById('rpm');
+const rpmNumber = document.getElementById('rpmn');
+const speed1Input = document.getElementById('s1');
+const speed1Number = document.getElementById('s1n');
+const speed2Input = document.getElementById('s2');
+const speed2Number = document.getElementById('s2n');
+const ratioInput = document.getElementById('ratio');
+const ratioNumber = document.getElementById('rn');
+const wedgeInput = document.getElementById('wedge');
+const wedgeNumber = document.getElementById('wedgen');
+const dir1Btn = document.getElementById('d1btn');
+const dir2Btn = document.getElementById('d2btn');
+
+function updateControlLabels() {
+  rpmInput.value = baseRpm.toString();
+  rpmNumber.value = formatNumber(baseRpm, 0);
+  speed1Input.value = speed1.toString();
+  speed1Number.value = formatNumber(speed1);
+  speed2Input.value = speed2.toString();
+  speed2Number.value = formatNumber(speed2);
+  ratioInput.value = speedRatio.toString();
+  ratioNumber.value = formatNumber(speedRatio);
+  wedgeInput.value = wedgeDeg.toString();
+  wedgeNumber.value = wedgeDeg.toString();
+}
+
+function setSpeed2FromRatio() {
+  speed2 = Math.min(Number(speed2Input.max), speed1 * speedRatio);
+  if (speed1 > 0 && speed2 < speed1 * speedRatio) {
+    speedRatio = speed2 / speed1;
+  }
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function commitNumber(numberInput, rangeInput, applyValue) {
+  const value = parseFloat(numberInput.value);
+  if (!Number.isFinite(value)) {
+    updateControlLabels();
+    return;
+  }
+
+  const clamped = clamp(value, Number(rangeInput.min), Number(rangeInput.max));
+  applyValue(clamped);
+  updateControlLabels();
+  clearTrail();
+}
+
+function applyOnEnter(numberInput, applyValue) {
+  numberInput.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    applyValue();
+  });
+}
+
+playBtn.onclick = () => {
+  playing = !playing;
+  playBtn.textContent = playing ? '⏸ Pause' : '▶ Play';
+};
+clearBtn.onclick = () => {
+  clearTrail();
+};
+rpmInput.oninput = function() {
+  baseRpm = parseFloat(this.value);
+  updateControlLabels();
+  clearTrail();
+};
+speed1Input.oninput = function() {
+  speed1 = parseFloat(this.value);
+  if (speed1 > 0) {
+    speedRatio = clamp(speed2 / speed1, Number(ratioInput.min), Number(ratioInput.max));
+  }
+  updateControlLabels();
+  clearTrail();
+};
+speed2Input.oninput = function() {
+  speed2 = parseFloat(this.value);
+  if (speed1 > 0) {
+    speedRatio = clamp(speed2 / speed1, Number(ratioInput.min), Number(ratioInput.max));
+  }
+  updateControlLabels();
+  clearTrail();
+};
+ratioInput.oninput = function() {
+  speedRatio = parseFloat(this.value);
+  setSpeed2FromRatio();
+  updateControlLabels();
+  clearTrail();
+};
+wedgeInput.oninput = function() {
+  wedgeDeg = parseInt(this.value);
+  updateControlLabels();
+  clearTrail();
+};
+applyOnEnter(rpmNumber, () => {
+  commitNumber(rpmNumber, rpmInput, (value) => {
+    baseRpm = value;
+  });
+});
+applyOnEnter(speed1Number, () => {
+  commitNumber(speed1Number, speed1Input, (value) => {
+    speed1 = value;
+    if (speed1 > 0) speedRatio = clamp(speed2 / speed1, Number(ratioInput.min), Number(ratioInput.max));
+  });
+});
+applyOnEnter(speed2Number, () => {
+  commitNumber(speed2Number, speed2Input, (value) => {
+    speed2 = value;
+    if (speed1 > 0) speedRatio = clamp(speed2 / speed1, Number(ratioInput.min), Number(ratioInput.max));
+  });
+});
+applyOnEnter(ratioNumber, () => {
+  commitNumber(ratioNumber, ratioInput, (value) => {
+    speedRatio = value;
+    setSpeed2FromRatio();
+  });
+});
+applyOnEnter(wedgeNumber, () => {
+  commitNumber(wedgeNumber, wedgeInput, (value) => {
+    wedgeDeg = Math.round(value);
+  });
+});
+dir1Btn.onclick = function() {
+  dir1 *= -1;
+  this.textContent = dir1 > 0 ? 'CW' : 'CCW';
+  clearTrail();
+};
+dir2Btn.onclick = function() {
+  dir2 *= -1;
+  this.textContent = dir2 > 0 ? 'CW' : 'CCW';
+  clearTrail();
+};
+updateControlLabels();
+</script>
+</body>
+</html>
