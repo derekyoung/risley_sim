@@ -38,7 +38,29 @@ body{
 }
 .wrap{display:flex;flex-direction:column;gap:0;padding:0}
 canvas{display:block;width:100%;height:480px}
-canvas.scene-terrain{height:400px}
+canvas.scene-terrain,
+canvas.scene-nadir{height:380px;width:100%}
+.terrain-dual{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  padding:0;
+}
+.terrain-dual .terrain-view{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+.terrain-dual .terrain-view-head{flex-shrink:0}
+@media(min-width:920px){
+  .terrain-dual{
+    flex-direction:row;
+    align-items:stretch;
+    gap:12px;
+    padding:0 10px 4px;
+  }
+  .terrain-dual .terrain-view{flex:1}
+}
 .controls{display:flex;align-items:center;gap:16px;padding:12px 16px;flex-wrap:wrap;border-top:0.5px solid var(--color-border-tertiary)}
 .ctrl-group{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-secondary)}
 .ctrl-group label{white-space:nowrap}
@@ -92,7 +114,7 @@ button:hover{background:var(--color-background-secondary)}
 <main class="page">
   <header class="intro">
     <h1>Dual Prism Risley Scanner Visualizer</h1>
-    <p>Explore how rotating wedge prisms steer a laser spot across a scan plane, with base RPM, speed multipliers, velocity ratio, and optional P2 galvo controls. A second panel shows a coastal cross-section (ocean on the left, beach slope, flat backbeach on the right): the same steering angles intersect the terrain, with adjustable sensor height, look-down angle, backbeach width and height, slope width, and total scene width.</p>
+    <p>The terrain section shows both a side profile (cross-shore vs height) and a nadir plan map (cross-shore vs along-shore): same coast strip and LiDAR, with Risley steering. On wide windows the two canvases sit side by side; on narrow screens they stack.</p>
   </header>
   <div class="panel-stack">
   <section class="panel" aria-label="Risley scanner visualization">
@@ -180,11 +202,20 @@ button:hover{background:var(--color-background-secondary)}
   </div>
     </div>
   </section>
-  <section class="panel" aria-label="Coastal terrain LiDAR profile">
+  <section class="panel" aria-label="Coastal terrain: side profile and nadir plan view">
     <div class="wrap">
-      <canvas id="c2" class="scene-terrain" height="400" width="800"></canvas>
+      <div class="terrain-dual">
+        <div class="terrain-view">
+          <div class="terrain-view-head"><span class="badge b-blue">Side profile — cross-shore × height</span></div>
+          <canvas id="c2" class="scene-terrain" height="380" width="800"></canvas>
+        </div>
+        <div class="terrain-view">
+          <div class="terrain-view-head"><span class="badge b-green">Nadir plan — cross-shore × along-shore</span></div>
+          <canvas id="c3" class="scene-nadir" height="380" width="800"></canvas>
+        </div>
+      </div>
       <div class="controls">
-        <span class="badge b-blue">Terrain view</span>
+        <span class="badge b-blue">Terrain (side + nadir)</span>
         <div class="ctrl-group">
           <label>Sensor height</label>
           <input type="range" id="lidH" min="3" max="120" step="1" value="10">
@@ -231,12 +262,16 @@ const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 const canvas2 = document.getElementById('c2');
 const ctx2 = canvas2.getContext('2d');
+const canvas3 = document.getElementById('c3');
+const ctx3 = canvas3.getContext('2d');
 
 // Offscreen canvas for the accumulating scan trail
 const trail = document.createElement('canvas');
 const tctx = trail.getContext('2d');
 const trail2 = document.createElement('canvas');
 const tctx2 = trail2.getContext('2d');
+const trail3 = document.createElement('canvas');
+const tctx3 = trail3.getContext('2d');
 
 let playing = true;
 let angle1 = 0, angle2 = 0;
@@ -254,6 +289,7 @@ let galvoCenterDeg = 0;
 let lastSpot = null;
 let spotHistory = [];
 let lastTerrainSpot = null;
+let lastNadirSpot = null;
 const MAX_TRAIL = 3000;
 const TAU = Math.PI * 2;
 
@@ -298,11 +334,18 @@ function resize() {
   trail.width = w;
   trail.height = 480;
 
+  const TERRAIN_H = 380;
   const w2 = canvas2.parentElement.offsetWidth || 680;
   canvas2.width = w2;
-  canvas2.height = 400;
+  canvas2.height = TERRAIN_H;
   trail2.width = w2;
-  trail2.height = 400;
+  trail2.height = TERRAIN_H;
+
+  const w3 = canvas3.parentElement.offsetWidth || 680;
+  canvas3.width = w3;
+  canvas3.height = TERRAIN_H;
+  trail3.width = w3;
+  trail3.height = TERRAIN_H;
 
   clearTrail();
 }
@@ -312,14 +355,18 @@ window.addEventListener('resize', resize);
 function clearTrail() {
   tctx.clearRect(0, 0, trail.width, trail.height);
   tctx2.clearRect(0, 0, trail2.width, trail2.height);
+  tctx3.clearRect(0, 0, trail3.width, trail3.height);
   spotHistory = [];
   lastSpot = null;
   lastTerrainSpot = null;
+  lastNadirSpot = null;
 }
 
 function clearTerrainTrail() {
   tctx2.clearRect(0, 0, trail2.width, trail2.height);
+  tctx3.clearRect(0, 0, trail3.width, trail3.height);
   lastTerrainSpot = null;
+  lastNadirSpot = null;
 }
 
 function formatNumber(value, digits = 3) {
@@ -629,6 +676,63 @@ function rayTerrainHit(ox, oz, dirx, dirz, pts) {
     }
   }
   return bestHit;
+}
+
+/** Linearly interpolated surface height z at cross-shore x (extruded strip z = f(x)). */
+function terrainZAtX(x, surfPts) {
+  const n = surfPts.length;
+  if (n === 0) return 0;
+  if (x <= surfPts[0].x) return surfPts[0].z;
+  if (x >= surfPts[n - 1].x) return surfPts[n - 1].z;
+  for (let i = 0; i < n - 1; i++) {
+    const a = surfPts[i];
+    const b = surfPts[i + 1];
+    if (x >= a.x && x <= b.x) {
+      const span = b.x - a.x;
+      const u = span < 1e-9 ? 0 : (x - a.x) / span;
+      return a.z + u * (b.z - a.z);
+    }
+  }
+  return surfPts[n - 1].z;
+}
+
+/**
+ * First hit of ray (ox,oy,oz) + t * dir with vertically extruded terrain z = f(x).
+ * Returns { x, y, z, t } in meters (y is along-shore; x is cross-shore as in the profile).
+ */
+function rayExtrudedTerrainHit(ox, oy, oz, dirx, diry, dirz, surfPts) {
+  const len = Math.hypot(dirx, diry, dirz);
+  if (len < 1e-9) return null;
+  const dx = dirx / len;
+  const dy = diry / len;
+  const dz = dirz / len;
+
+  const g = (t) => {
+    const x = ox + dx * t;
+    const zRay = oz + dz * t;
+    return zRay - terrainZAtX(x, surfPts);
+  };
+
+  let h0 = g(0);
+  if (h0 <= 0) return null;
+
+  let t1 = 8;
+  const tCap = 25000;
+  while (t1 < tCap && g(t1) > 0) t1 *= 1.25;
+  if (g(t1) > 0) return null;
+
+  let tLo = 0;
+  let tHi = t1;
+  for (let k = 0; k < 56; k++) {
+    const tm = (tLo + tHi) * 0.5;
+    if (g(tm) > 0) tLo = tm;
+    else tHi = tm;
+  }
+  const t = (tLo + tHi) * 0.5;
+  const x = ox + dx * t;
+  const y = oy + dy * t;
+  const z = terrainZAtX(x, surfPts);
+  return { x, y, z, t };
 }
 
 /** Shoreward blend: 0 offshore (left), 1 at beach (right). */
@@ -986,6 +1090,199 @@ function drawTerrain() {
   ctx2.fillText(`Profile: ${formatNumber(sceneWidthM, 0)} m across · height ${formatNumber(lidarHeightM, 0)} m · look ${formatNumber(lookDownDeg, 1)}° + Risley Δ`, padL, H - 14);
 }
 
+function drawTerrainNadir() {
+  const W = canvas3.width;
+  const H = canvas3.height;
+  const dark = isDark();
+  const { dx2, dy2 } = computeDeflections();
+
+  const scene = buildTerrainProfile();
+  const { xLeft, xOceanEnd, xBermLeft, xRight, zBack, zSea } = scene;
+  const waveT = performance.now() * 0.001;
+  const fullSurf = buildFullOceanBeachSurface(scene, waveT);
+
+  const xmin = xLeft - sceneWidthM * 0.04;
+  const xmax = xRight + sceneWidthM * 0.04;
+  const yExtent = Math.max(42, sceneWidthM * 0.14);
+  const ymin = -yExtent;
+  const ymax = yExtent;
+
+  const padL = 44;
+  const padR = 14;
+  const padT = 26;
+  const padB = 40;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  function wx(x) {
+    return padL + ((x - xmin) / (xmax - xmin)) * plotW;
+  }
+  function wy(y) {
+    return padT + ((ymax - y) / (ymax - ymin)) * plotH;
+  }
+
+  const lookRad = lookDownDeg * Math.PI / 180;
+  const elev = lookRad + dy2 + dx2 * 0.15;
+  const az = dx2;
+  const dirx = -Math.cos(elev) * Math.cos(az);
+  const diry = -Math.cos(elev) * Math.sin(az);
+  const dirz = -Math.sin(elev);
+
+  const ox = Math.max(xBermLeft + sceneWidthM * 0.02, xRight - sceneWidthM * 0.035);
+  const oy = 0;
+  const oz = lidarHeightM;
+
+  const dirx0 = -Math.cos(lookRad);
+  const dirz0 = -Math.sin(lookRad);
+  const centerHit = rayExtrudedTerrainHit(ox, oy, oz, dirx0, 0, dirz0, fullSurf);
+  const hit = rayExtrudedTerrainHit(ox, oy, oz, dirx, diry, dirz, fullSurf);
+
+  ctx3.clearRect(0, 0, W, H);
+  ctx3.fillStyle = dark ? '#1a2228' : '#e8eef2';
+  ctx3.fillRect(0, 0, W, H);
+
+  function fillBand(x0, x1, fill, stroke) {
+    ctx3.beginPath();
+    ctx3.moveTo(wx(x0), wy(ymin));
+    ctx3.lineTo(wx(x1), wy(ymin));
+    ctx3.lineTo(wx(x1), wy(ymax));
+    ctx3.lineTo(wx(x0), wy(ymax));
+    ctx3.closePath();
+    ctx3.fillStyle = fill;
+    ctx3.fill();
+    if (stroke) {
+      ctx3.strokeStyle = stroke;
+      ctx3.lineWidth = 1;
+      ctx3.stroke();
+    }
+  }
+
+  fillBand(xmin, xLeft, dark ? '#0f2530' : '#b8d4e8', dark ? '#1a3a4a' : '#7aa8c8');
+  fillBand(xLeft, xOceanEnd, dark ? '#123240' : '#9ec4de', dark ? '#1e4558' : '#6a9ab8');
+  fillBand(xOceanEnd, xBermLeft, dark ? '#2a3228' : '#d4c4a8', dark ? '#3d4538' : '#a89878');
+  fillBand(xBermLeft, xRight, dark ? '#2c3024' : '#c8c2a8', dark ? '#454238' : '#9a9470');
+  fillBand(xRight, xmax, dark ? '#1e2220' : '#d8d4c8', null);
+
+  ctx3.strokeStyle = dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+  ctx3.lineWidth = 1;
+  for (let gx = Math.ceil(xmin / 40) * 40; gx <= xmax; gx += 40) {
+    ctx3.beginPath();
+    ctx3.moveTo(wx(gx), wy(ymin));
+    ctx3.lineTo(wx(gx), wy(ymax));
+    ctx3.stroke();
+  }
+  for (let gy = Math.ceil(ymin / 20) * 20; gy <= ymax; gy += 20) {
+    ctx3.beginPath();
+    ctx3.moveTo(wx(xmin), wy(gy));
+    ctx3.lineTo(wx(xmax), wy(gy));
+    ctx3.stroke();
+  }
+
+  const sx0 = wx(ox);
+  const sy0 = wy(oy);
+
+  let refPx = wx(ox + dirx0 * sceneWidthM * 0.55);
+  let refPy = wy(oy);
+  if (centerHit) {
+    refPx = wx(centerHit.x);
+    refPy = wy(centerHit.y);
+  }
+
+  let hx = wx(ox + dirx * sceneWidthM * 0.55);
+  let hy = wy(oy + diry * sceneWidthM * 0.55);
+  if (hit) {
+    hx = wx(hit.x);
+    hy = wy(hit.y);
+    if (lastNadirSpot && playing) {
+      tctx3.beginPath();
+      tctx3.moveTo(lastNadirSpot.x, lastNadirSpot.y);
+      tctx3.lineTo(hx, hy);
+      tctx3.strokeStyle = '#22d86e';
+      tctx3.lineWidth = 1.1;
+      tctx3.globalAlpha = 0.48;
+      tctx3.stroke();
+      tctx3.globalAlpha = 1;
+    }
+    if (playing) {
+      tctx3.globalAlpha = 0.014;
+      tctx3.fillStyle = dark ? '#1a2228' : '#e8eef2';
+      tctx3.fillRect(0, 0, trail3.width, trail3.height);
+      tctx3.globalAlpha = 1;
+    }
+  }
+
+  ctx3.drawImage(trail3, 0, 0);
+
+  ctx3.strokeStyle = dark ? '#6a6860' : '#9c9888';
+  ctx3.lineWidth = 1.2;
+  ctx3.strokeRect(padL, padT, plotW, plotH);
+
+  ctx3.beginPath();
+  ctx3.moveTo(sx0, sy0);
+  ctx3.lineTo(refPx, refPy);
+  ctx3.strokeStyle = dark ? '#e8c028' : '#c9a000';
+  ctx3.lineWidth = 2;
+  ctx3.globalAlpha = 0.9;
+  ctx3.setLineDash([6, 4]);
+  ctx3.stroke();
+  ctx3.setLineDash([]);
+  ctx3.globalAlpha = 1;
+
+  ctx3.beginPath();
+  ctx3.moveTo(sx0, sy0);
+  ctx3.lineTo(hx, hy);
+  ctx3.strokeStyle = '#22d86e';
+  ctx3.lineWidth = 2;
+  ctx3.globalAlpha = 0.88;
+  ctx3.stroke();
+  ctx3.globalAlpha = 1;
+
+  ctx3.fillStyle = dark ? '#3a444c' : '#c8d0d6';
+  ctx3.strokeStyle = dark ? '#6a747c' : '#98a2a8';
+  ctx3.lineWidth = 1;
+  ctx3.beginPath();
+  ctx3.arc(sx0, sy0, 6, 0, Math.PI * 2);
+  ctx3.fill();
+  ctx3.stroke();
+  ctx3.fillStyle = mutedColor();
+  ctx3.font = `400 10px var(--font-sans, sans-serif)`;
+  ctx3.textAlign = 'center';
+  ctx3.fillText('LiDAR', sx0, sy0 - 12);
+
+  if (hit) {
+    ctx3.beginPath();
+    ctx3.arc(hx, hy, 4.5, 0, Math.PI * 2);
+    ctx3.fillStyle = '#22d86e';
+    ctx3.fill();
+    const g3 = ctx3.createRadialGradient(hx, hy, 0, hx, hy, 14);
+    g3.addColorStop(0, '#22d86e44');
+    g3.addColorStop(1, '#22d86e00');
+    ctx3.beginPath();
+    ctx3.arc(hx, hy, 14, 0, Math.PI * 2);
+    ctx3.fillStyle = g3;
+    ctx3.fill();
+    lastNadirSpot = { x: hx, y: hy };
+  } else {
+    lastNadirSpot = null;
+  }
+
+  ctx3.fillStyle = mutedColor();
+  ctx3.font = `400 10px var(--font-sans, sans-serif)`;
+  ctx3.textAlign = 'center';
+  ctx3.fillText('Ocean ←  cross-shore (m)  → land', padL + plotW * 0.5, H - 24);
+  ctx3.save();
+  ctx3.translate(14, padT + plotH * 0.5);
+  ctx3.rotate(-Math.PI / 2);
+  ctx3.fillText('Along-shore (m)', 0, 0);
+  ctx3.restore();
+  ctx3.textAlign = 'left';
+  ctx3.fillText(
+    `Nadir: extruded strip z(x); beam pitch = look + Risley (same as profile); yaw from dx₂`,
+    padL,
+    H - 10
+  );
+}
+
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -1016,6 +1313,7 @@ function loop(now) {
   if (playing) advanceAngles(dt);
   draw();
   drawTerrain();
+  drawTerrainNadir();
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
