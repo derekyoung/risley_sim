@@ -194,10 +194,20 @@ button:hover{background:var(--color-background-secondary)}
       <span class="unit">°</span>
     </div>
     <div class="ctrl-group">
-      <span class="badge b-purple">Wedge α</span>
-      <input type="range" id="wedge" min="5" max="40" step="1" value="10">
-      <input type="number" id="wedgen" min="5" max="40" step="1" value="10" aria-label="Wedge angle">
+      <span class="badge b-blue">P1 α₁</span>
+      <input type="range" id="alpha1" min="5" max="40" step="1" value="10">
+      <input type="number" id="alpha1n" min="5" max="40" step="1" value="10" aria-label="P1 wedge angle">
       <span class="unit">°</span>
+    </div>
+    <div class="ctrl-group">
+      <span class="badge b-red">P2 α₂</span>
+      <input type="range" id="alpha2" min="5" max="40" step="1" value="10">
+      <input type="number" id="alpha2n" min="5" max="40" step="1" value="10" aria-label="P2 wedge angle">
+      <span class="unit">°</span>
+      <label>
+        <input type="checkbox" id="alphaLock" aria-label="Lock P1 and P2 wedge angles together">
+        Lock
+      </label>
     </div>
   </div>
     </div>
@@ -280,7 +290,8 @@ let dir1 = 1, dir2 = -1;
 let baseRpm = 20;
 let speed1 = 1.0, speed2 = 1.7;
 let speedRatio = 1.7;
-let wedgeDeg = 10;
+let alpha1Deg = 10, alpha2Deg = 10;
+let lockAlpha = false;
 let galvoP2 = false;
 let galvoAmpDeg = 90;
 let galvoFreq = 1;
@@ -382,20 +393,16 @@ function effectiveRpm(speed) {
   return baseRpm * speed;
 }
 
-// Wedge angle (rad) and cumulative Risley deflections
-function wedgeRad() {
-  return wedgeDeg * Math.PI / 180;
-}
-
 /** Cumulative prism deflections (radians), same convention as the scan-plane view. */
 function computeDeflections() {
-  const wedge = wedgeRad();
+  const w1 = alpha1Deg * Math.PI / 180;
+  const w2 = alpha2Deg * Math.PI / 180;
   const a1 = angle1;
   const a2 = currentP2Angle();
-  const dx1 = Math.sin(a1) * wedge;
-  const dy1 = Math.cos(a1) * wedge;
-  const dx2 = dx1 + Math.sin(a2) * wedge;
-  const dy2 = dy1 + Math.cos(a2) * wedge;
+  const dx1 = Math.sin(a1) * w1;
+  const dy1 = Math.cos(a1) * w1;
+  const dx2 = dx1 + Math.sin(a2) * w2;
+  const dy2 = dy1 + Math.cos(a2) * w2;
   return { dx1, dy1, dx2, dy2 };
 }
 
@@ -642,7 +649,7 @@ function draw() {
   ctx.fillText(scanLabel, L.scanX, L.scanY + L.scanR + 30);
 
   // Wedge label bottom
-  ctx.fillText(`Wedge α = ${wedgeDeg}°`, (L.p1x + L.p2x) / 2, L.srcY + L.prismR + 28);
+  ctx.fillText(`α₁ = ${alpha1Deg}°   α₂ = ${alpha2Deg}°`, (L.p1x + L.p2x) / 2, L.srcY + L.prismR + 28);
 
   // Laser label
   ctx.textAlign = 'center';
@@ -1366,8 +1373,11 @@ const speed2Input = document.getElementById('s2');
 const speed2Number = document.getElementById('s2n');
 const ratioInput = document.getElementById('ratio');
 const ratioNumber = document.getElementById('rn');
-const wedgeInput = document.getElementById('wedge');
-const wedgeNumber = document.getElementById('wedgen');
+const alpha1Input = document.getElementById('alpha1');
+const alpha1Number = document.getElementById('alpha1n');
+const alpha2Input = document.getElementById('alpha2');
+const alpha2Number = document.getElementById('alpha2n');
+const alphaLockInput = document.getElementById('alphaLock');
 const dir1Btn = document.getElementById('d1btn');
 const dir2Btn = document.getElementById('d2btn');
 const lidHInput = document.getElementById('lidH');
@@ -1395,22 +1405,22 @@ const galvoCenterNumber = document.getElementById('gcentern');
 const presets = {
   original: {
     baseRpm: 20, speed1: 1, speed2: 1.7, speedRatio: 1.7,
-    dir1: 1, dir2: -1, wedgeDeg: 10, galvoP2: false,
+    dir1: 1, dir2: -1, alpha1Deg: 10, alpha2Deg: 10, galvoP2: false,
     galvoAmpDeg: 90, galvoFreq: 1, galvoPhaseDeg: 90, galvoCenterDeg: 0
   },
   circle_fixed: {
     baseRpm: 20, speed1: 1, speed2: 1, speedRatio: 1,
-    dir1: 1, dir2: -1, wedgeDeg: 10, galvoP2: true,
+    dir1: 1, dir2: -1, alpha1Deg: 10, alpha2Deg: 10, galvoP2: true,
     galvoAmpDeg: 0, galvoFreq: 1, galvoPhaseDeg: 90, galvoCenterDeg: 90
   },
   counter: {
     baseRpm: 20, speed1: 1, speed2: 1, speedRatio: 1,
-    dir1: 1, dir2: -1, wedgeDeg: 10, galvoP2: false,
+    dir1: 1, dir2: -1, alpha1Deg: 10, alpha2Deg: 10, galvoP2: false,
     galvoAmpDeg: 90, galvoFreq: 1, galvoPhaseDeg: 90, galvoCenterDeg: 0
   },
   clover: {
     baseRpm: 12, speed1: 1, speed2: 0.5, speedRatio: 0.5,
-    dir1: 1, dir2: 1, wedgeDeg: 10, galvoP2: false,
+    dir1: 1, dir2: 1, alpha1Deg: 10, alpha2Deg: 10, galvoP2: false,
     galvoAmpDeg: 90, galvoFreq: 1, galvoPhaseDeg: 90, galvoCenterDeg: 0
   }
 };
@@ -1434,8 +1444,10 @@ function updateControlLabels() {
   speed2Number.value = formatNumber(speed2);
   ratioInput.value = speedRatio.toString();
   ratioNumber.value = formatNumber(speedRatio);
-  wedgeInput.value = wedgeDeg.toString();
-  wedgeNumber.value = wedgeDeg.toString();
+  alpha1Input.value = alpha1Deg.toString();
+  alpha1Number.value = alpha1Deg.toString();
+  alpha2Input.value = alpha2Deg.toString();
+  alpha2Number.value = alpha2Deg.toString();
   lidHInput.value = String(Math.round(lidarHeightM));
   lidHNumber.value = formatNumber(lidarHeightM, 0);
   lookInput.value = lookDownDeg.toString();
@@ -1457,6 +1469,7 @@ function updateControlLabels() {
   galvoPhaseNumber.value = formatNumber(galvoPhaseDeg, 0);
   galvoCenterInput.value = galvoCenterDeg.toString();
   galvoCenterNumber.value = formatNumber(galvoCenterDeg, 0);
+  alphaLockInput.checked = lockAlpha;
   dir1Btn.textContent = dir1 > 0 ? 'CW' : 'CCW';
   dir2Btn.textContent = dir2 > 0 ? 'CW' : 'CCW';
 
@@ -1479,7 +1492,8 @@ function applyPreset(key) {
   speedRatio = preset.speedRatio;
   dir1 = preset.dir1;
   dir2 = preset.dir2;
-  wedgeDeg = preset.wedgeDeg;
+  alpha1Deg = preset.alpha1Deg;
+  alpha2Deg = preset.alpha2Deg;
   galvoP2 = preset.galvoP2;
   galvoAmpDeg = preset.galvoAmpDeg;
   galvoFreq = preset.galvoFreq;
@@ -1579,8 +1593,23 @@ ratioInput.oninput = function() {
   updateControlLabels();
   clearTrail();
 };
-wedgeInput.oninput = function() {
-  wedgeDeg = parseInt(this.value);
+alpha1Input.oninput = function() {
+  alpha1Deg = parseInt(this.value);
+  if (lockAlpha) alpha2Deg = alpha1Deg;
+  markCustom();
+  updateControlLabels();
+  clearTrail();
+};
+alpha2Input.oninput = function() {
+  alpha2Deg = parseInt(this.value);
+  if (lockAlpha) alpha1Deg = alpha2Deg;
+  markCustom();
+  updateControlLabels();
+  clearTrail();
+};
+alphaLockInput.onchange = function() {
+  lockAlpha = this.checked;
+  if (lockAlpha) alpha2Deg = alpha1Deg;
   markCustom();
   updateControlLabels();
   clearTrail();
@@ -1638,9 +1667,16 @@ applyOnEnter(ratioNumber, () => {
     setSpeed2FromRatio();
   });
 });
-applyOnEnter(wedgeNumber, () => {
-  commitNumber(wedgeNumber, wedgeInput, (value) => {
-    wedgeDeg = Math.round(value);
+applyOnEnter(alpha1Number, () => {
+  commitNumber(alpha1Number, alpha1Input, (value) => {
+    alpha1Deg = Math.round(value);
+    if (lockAlpha) alpha2Deg = alpha1Deg;
+  });
+});
+applyOnEnter(alpha2Number, () => {
+  commitNumber(alpha2Number, alpha2Input, (value) => {
+    alpha2Deg = Math.round(value);
+    if (lockAlpha) alpha1Deg = alpha2Deg;
   });
 });
 applyOnEnter(lidHNumber, () => {
