@@ -1217,6 +1217,42 @@ function drawTerrainNadir() {
   ctx3.lineWidth = 1.2;
   ctx3.strokeRect(padL, padT, plotW, plotH);
 
+  // Ocean / beach interface (toe of slope — same x as profile ocean→slope join)
+  const shoreX = wx(xOceanEnd);
+  if (shoreX >= padL - 1 && shoreX <= padL + plotW + 1) {
+    ctx3.beginPath();
+    ctx3.moveTo(shoreX, padT);
+    ctx3.lineTo(shoreX, padT + plotH);
+    ctx3.strokeStyle = dark ? 'rgba(255, 200, 120, 0.92)' : 'rgba(180, 85, 20, 0.88)';
+    ctx3.lineWidth = 2;
+    ctx3.setLineDash([5, 4]);
+    ctx3.stroke();
+    ctx3.setLineDash([]);
+    ctx3.font = `500 10px var(--font-sans, sans-serif)`;
+    ctx3.fillStyle = dark ? 'rgba(255, 210, 140, 0.95)' : 'rgba(120, 55, 12, 0.92)';
+    ctx3.textAlign = 'left';
+    const lx = Math.min(shoreX + 5, padL + plotW - 72);
+    ctx3.fillText('Shoreline', lx, padT + 14);
+  }
+
+  // Landward edge of sloping beach (slope → flat backbeach), same x as profile berm
+  const bermX = wx(xBermLeft);
+  if (bermX >= padL - 1 && bermX <= padL + plotW + 1) {
+    ctx3.beginPath();
+    ctx3.moveTo(bermX, padT);
+    ctx3.lineTo(bermX, padT + plotH);
+    ctx3.strokeStyle = dark ? 'rgba(120, 220, 255, 0.9)' : 'rgba(20, 110, 140, 0.88)';
+    ctx3.lineWidth = 2;
+    ctx3.setLineDash([2, 6]);
+    ctx3.stroke();
+    ctx3.setLineDash([]);
+    ctx3.font = `500 10px var(--font-sans, sans-serif)`;
+    ctx3.fillStyle = dark ? 'rgba(150, 235, 255, 0.95)' : 'rgba(15, 85, 110, 0.92)';
+    ctx3.textAlign = 'right';
+    const rx = Math.max(bermX - 5, padL + 78);
+    ctx3.fillText('End of beach slope', rx, padT + 28);
+  }
+
   ctx3.beginPath();
   ctx3.moveTo(sx0, sy0);
   ctx3.lineTo(refPx, refPy);
