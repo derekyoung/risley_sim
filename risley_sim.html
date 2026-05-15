@@ -173,8 +173,8 @@ button:hover{background:var(--color-background-secondary)}
     </div>
     <div class="ctrl-group">
       <span class="badge b-purple">Wedge α</span>
-      <input type="range" id="wedge" min="5" max="40" step="1" value="18">
-      <input type="number" id="wedgen" min="5" max="40" step="1" value="18" aria-label="Wedge angle">
+      <input type="range" id="wedge" min="5" max="40" step="1" value="10">
+      <input type="number" id="wedgen" min="5" max="40" step="1" value="10" aria-label="Wedge angle">
       <span class="unit">°</span>
     </div>
   </div>
@@ -245,7 +245,7 @@ let dir1 = 1, dir2 = -1;
 let baseRpm = 20;
 let speed1 = 1.0, speed2 = 1.7;
 let speedRatio = 1.7;
-let wedgeDeg = 18;
+let wedgeDeg = 10;
 let galvoP2 = false;
 let galvoAmpDeg = 90;
 let galvoFreq = 1;
@@ -1061,22 +1061,22 @@ const galvoCenterNumber = document.getElementById('gcentern');
 const presets = {
   original: {
     baseRpm: 20, speed1: 1, speed2: 1.7, speedRatio: 1.7,
-    dir1: 1, dir2: -1, wedgeDeg: 18, galvoP2: false,
+    dir1: 1, dir2: -1, wedgeDeg: 10, galvoP2: false,
     galvoAmpDeg: 90, galvoFreq: 1, galvoPhaseDeg: 90, galvoCenterDeg: 0
   },
   circle_fixed: {
     baseRpm: 20, speed1: 1, speed2: 1, speedRatio: 1,
-    dir1: 1, dir2: -1, wedgeDeg: 18, galvoP2: true,
+    dir1: 1, dir2: -1, wedgeDeg: 10, galvoP2: true,
     galvoAmpDeg: 0, galvoFreq: 1, galvoPhaseDeg: 90, galvoCenterDeg: 90
   },
   counter: {
     baseRpm: 20, speed1: 1, speed2: 1, speedRatio: 1,
-    dir1: 1, dir2: -1, wedgeDeg: 18, galvoP2: false,
+    dir1: 1, dir2: -1, wedgeDeg: 10, galvoP2: false,
     galvoAmpDeg: 90, galvoFreq: 1, galvoPhaseDeg: 90, galvoCenterDeg: 0
   },
   clover: {
     baseRpm: 12, speed1: 1, speed2: 0.5, speedRatio: 0.5,
-    dir1: 1, dir2: 1, wedgeDeg: 18, galvoP2: false,
+    dir1: 1, dir2: 1, wedgeDeg: 10, galvoP2: false,
     galvoAmpDeg: 90, galvoFreq: 1, galvoPhaseDeg: 90, galvoCenterDeg: 0
   }
 };
