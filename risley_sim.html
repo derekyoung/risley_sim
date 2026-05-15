@@ -92,8 +92,7 @@ button:hover{background:var(--color-background-secondary)}
 <main class="page">
   <header class="intro">
     <h1>Dual Prism Risley Scanner Visualizer</h1>
-    <p>Explore how two rotating wedge prisms steer a laser spot across a scan plane. Use base RPM, individual speed multipliers, and the velocity ratio to shape the scan trail. A second panel shows a coastal cross-section (ocean on the left, beach slope, flat backbeach on the right): the same steering angles intersect the terrain, with adjustable sensor height, look-down angle, backbeach width and height, slope width, and total scene width.</p>
-    <p>Explore how rotating wedge prisms steer a laser spot across a scan plane, including an optional P2 galvo mode with amplitude, frequency, phase, and center controls.</p>
+    <p>Explore how rotating wedge prisms steer a laser spot across a scan plane, with base RPM, speed multipliers, velocity ratio, and optional P2 galvo controls. A second panel shows a coastal cross-section (ocean on the left, beach slope, flat backbeach on the right): the same steering angles intersect the terrain, with adjustable sensor height, look-down angle, backbeach width and height, slope width, and total scene width.</p>
   </header>
   <div class="panel-stack">
   <section class="panel" aria-label="Risley scanner visualization">
@@ -114,8 +113,8 @@ button:hover{background:var(--color-background-secondary)}
     </div>
     <div class="ctrl-group">
       <span class="badge b-green">Base RPM</span>
-      <input type="range" id="rpm" min="0" max="120" step="1" value="12">
-      <input type="number" id="rpmn" min="0" max="120" step="1" value="12" aria-label="Base RPM value">
+      <input type="range" id="rpm" min="0" max="120" step="1" value="20">
+      <input type="number" id="rpmn" min="0" max="120" step="1" value="20" aria-label="Base RPM value">
       <span class="unit">rpm</span>
     </div>
     <div class="ctrl-group">
@@ -126,15 +125,15 @@ button:hover{background:var(--color-background-secondary)}
     </div>
     <div class="ctrl-group">
       <span class="badge b-red">P2 speed</span>
-      <input type="range" id="s2" min="0" max="4" step="0.001" value="0.743">
-      <input type="number" id="s2n" min="0" max="4" step="0.001" value="0.743" aria-label="P2 speed multiplier">
+      <input type="range" id="s2" min="0" max="4" step="0.001" value="1.7">
+      <input type="number" id="s2n" min="0" max="4" step="0.001" value="1.7" aria-label="P2 speed multiplier">
       <span class="unit">×</span>
     </div>
     <div class="ctrl-group">
       <span class="badge b-green">Ratio</span>
-      <input type="range" id="ratio" min="0" max="4" step="0.001" value="0.743">
+      <input type="range" id="ratio" min="0" max="4" step="0.001" value="1.7">
       <span class="unit">1:</span>
-      <input type="number" id="rn" min="0" max="4" step="0.001" value="0.743" aria-label="P2 to P1 speed ratio">
+      <input type="number" id="rn" min="0" max="4" step="0.001" value="1.7" aria-label="P2 to P1 speed ratio">
     </div>
     <div class="ctrl-group">
       <span class="badge b-blue">P1 dir</span>
@@ -145,9 +144,6 @@ button:hover{background:var(--color-background-secondary)}
       <button id="d2btn">CCW</button>
     </div>
     <div class="ctrl-group">
-      <label>Wedge α</label>
-      <input type="range" id="wedge" min="2" max="10" step="1" value="10">
-      <input type="number" id="wedgen" min="2" max="10" step="1" value="10" aria-label="Wedge angle">
       <span class="badge b-red">P2 galvo</span>
       <input type="checkbox" id="galvo" aria-label="Use galvo motion for P2">
     </div>
@@ -246,10 +242,10 @@ let playing = true;
 let angle1 = 0, angle2 = 0;
 let lastFrameTime = null;
 let dir1 = 1, dir2 = -1;
-let baseRpm = 12;
-let speed1 = 1.0, speed2 = 0.743;
-let speedRatio = 0.743;
-let wedgeDeg = 10;
+let baseRpm = 20;
+let speed1 = 1.0, speed2 = 1.7;
+let speedRatio = 1.7;
+let wedgeDeg = 18;
 let galvoP2 = false;
 let galvoAmpDeg = 90;
 let galvoFreq = 1;
@@ -348,7 +344,7 @@ function wedgeRad() {
 function computeDeflections() {
   const wedge = wedgeRad();
   const a1 = angle1;
-  const a2 = angle2;
+  const a2 = currentP2Angle();
   const dx1 = Math.sin(a1) * wedge;
   const dy1 = Math.cos(a1) * wedge;
   const dx2 = dx1 + Math.sin(a2) * wedge;
@@ -443,19 +439,6 @@ function draw() {
 
   const dark = isDark();
   const { dx1, dy1, dx2, dy2 } = computeDeflections();
-  const wedge = wedgeDeg * Math.PI / 180;
-
-  // Prism angles
-  const a1 = angle1;
-  const a2 = currentP2Angle();
-
-  // Beam: starts horizontal from source, deflected by P1, then P2
-  // P1 deflects by wedge in direction of prism angle
-  const dx1 = Math.sin(a1) * wedge;
-  const dy1 = Math.cos(a1) * wedge;
-  // P2 further deflects
-  const dx2 = dx1 + Math.sin(a2) * wedge;
-  const dy2 = dy1 + Math.cos(a2) * wedge;
 
   const beamEndX = L.scanX + Math.sin(dx2) * L.scanR;
   const beamEndY = L.scanY + Math.sin(dy2) * L.scanR;
@@ -566,7 +549,7 @@ function draw() {
   const prismBlue = '#378ADD';
   const prismRed = '#D85A30';
   drawPrism(L.p1x, L.srcY, L.prismR, angle1, prismBlue);
-  drawPrism(L.p2x, L.srcY, L.prismR, angle2, prismRed);
+  drawPrism(L.p2x, L.srcY, L.prismR, currentP2Angle(), prismRed);
 
   // ── Laser source box ──
   const sx = L.srcX - 16, sy = L.srcY - 18;
@@ -1077,7 +1060,7 @@ const galvoCenterNumber = document.getElementById('gcentern');
 
 const presets = {
   original: {
-    baseRpm: 12, speed1: 1, speed2: 1.037, speedRatio: 1.037,
+    baseRpm: 20, speed1: 1, speed2: 1.7, speedRatio: 1.7,
     dir1: 1, dir2: -1, wedgeDeg: 18, galvoP2: false,
     galvoAmpDeg: 90, galvoFreq: 1, galvoPhaseDeg: 90, galvoCenterDeg: 0
   },
